@@ -3,8 +3,16 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 // 1. 创建 axios 实例
+const DEFAULT_DEV_BASE_URL = 'http://127.0.0.1:5010'
+const runtimeBaseURL =
+  (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.trim() ||
+  ((typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+    ? DEFAULT_DEV_BASE_URL
+    : `${window.location.origin}`)
+
 const request = axios.create({
-  baseURL: 'http://127.0.0.1:5010', // 对应 Flask 的 5010 端口
+  baseURL: runtimeBaseURL,
   timeout: 10000 // 请求超时时间
 })
 

@@ -222,92 +222,98 @@ def update_model_config():
                 """))
                 db.session.commit()
                 config = ModelConfigService.get_default_config()
-        else:
-            # 更新现有配置
+            except Exception as e:
+                db.session.rollback()
+                raise e
+        
+        if not config:
+            return jsonify({'code': 500, 'msg': '无法创建或获取默认配置'}), 500
+        
+        # 更新配置（包括首次创建后的初次更新）
+        try:
+            # 先检查字段是否存在
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('flu_model_config')]
+            
+            # 尝试使用ORM更新
             try:
-                # 先检查字段是否存在
-                from sqlalchemy import inspect
-                inspector = inspect(db.engine)
-                columns = [col['name'] for col in inspector.get_columns('flu_model_config')]
+                # 更新 default_algorithm
+                if 'default_algorithm' in columns and hasattr(config, 'default_algorithm'):
+                    config.default_algorithm = default_algorithm
+                elif 'default_algorithm' in columns:
+                    # 字段存在但对象没有属性，使用原始SQL
+                    from sqlalchemy import text
+                    db.session.execute(text("""
+                        UPDATE flu_model_config 
+                        SET default_algorithm = :algorithm
+                        WHERE is_default = 1 AND status = 1
+                    """), {'algorithm': default_algorithm})
                 
-                # 尝试使用ORM更新
-                try:
-                    # 更新 default_algorithm
-                    if 'default_algorithm' in columns and hasattr(config, 'default_algorithm'):
-                        config.default_algorithm = default_algorithm
-                    elif 'default_algorithm' in columns:
+                # 更新其他字段
+                if 'r0' in data:
+                    config.r0 = float(data['r0'])
+                if 'incubation_period' in data:
+                    config.incubation_period = float(data['incubation_period'])
+                if 'infectious_period' in data:
+                    config.infectious_period = float(data['infectious_period'])
+                if 'intervention_factor' in data:
+                    config.intervention_factor = float(data['intervention_factor'])
+                if 'days' in data:
+                    if hasattr(config, 'days'):
+                        config.days = int(data['days'])
+                    elif 'days' in columns:
                         # 字段存在但对象没有属性，使用原始SQL
                         from sqlalchemy import text
                         db.session.execute(text("""
                             UPDATE flu_model_config 
-                            SET default_algorithm = :algorithm
+                            SET days = :days
                             WHERE is_default = 1 AND status = 1
-                        """), {'algorithm': default_algorithm})
-                    
-                    # 更新其他字段
-                    if 'r0' in data:
-                        config.r0 = float(data['r0'])
-                    if 'incubation_period' in data:
-                        config.incubation_period = float(data['incubation_period'])
-                    if 'infectious_period' in data:
-                        config.infectious_period = float(data['infectious_period'])
-                    if 'intervention_factor' in data:
-                        config.intervention_factor = float(data['intervention_factor'])
-                    if 'days' in data:
-                        if hasattr(config, 'days'):
-                            config.days = int(data['days'])
-                        elif 'days' in columns:
-                            # 字段存在但对象没有属性，使用原始SQL
-                            from sqlalchemy import text
-                            db.session.execute(text("""
-                                UPDATE flu_model_config 
-                                SET days = :days
-                                WHERE is_default = 1 AND status = 1
-                            """), {'days': int(data['days'])})
-                    
-                    db.session.commit()
-                    
-                except Exception as orm_e:
-                    # ORM更新失败，使用原始SQL
-                    db.session.rollback()
-                    from sqlalchemy import text
-                    update_sql = "UPDATE flu_model_config SET"
-                    params = {}
-                    updates = []
-                    
-                    # 更新 default_algorithm（如果字段存在）
-                    if 'default_algorithm' in columns:
-                        updates.append("default_algorithm = :default_algorithm")
-                        params['default_algorithm'] = default_algorithm
-                    
-                    # 更新其他字段
-                    if 'r0' in data:
-                        updates.append("r0 = :r0")
-                        params['r0'] = float(data['r0'])
-                    if 'incubation_period' in data and 'incubation_period' in columns:
-                        updates.append("incubation_period = :incubation_period")
-                        params['incubation_period'] = float(data['incubation_period'])
-                    if 'infectious_period' in data and 'infectious_period' in columns:
-                        updates.append("infectious_period = :infectious_period")
-                        params['infectious_period'] = float(data['infectious_period'])
-                    if 'intervention_factor' in data and 'intervention_factor' in columns:
-                        updates.append("intervention_factor = :intervention_factor")
-                        params['intervention_factor'] = float(data['intervention_factor'])
-                    if 'days' in data and 'days' in columns:
-                        updates.append("days = :days")
-                        params['days'] = int(data['days'])
-                    
-                    if updates:
-                        update_sql += " " + ", ".join(updates)
-                        update_sql += " WHERE is_default = 1 AND status = 1"
-                        db.session.execute(text(update_sql), params)
-                        db.session.commit()
-                    
-                    config = ModelConfigService.get_default_config()
-                    
-            except Exception as e:
+                        """), {'days': int(data['days'])})
+                
+                db.session.commit()
+                
+            except Exception as orm_e:
+                # ORM更新失败，使用原始SQL
                 db.session.rollback()
-                raise e
+                from sqlalchemy import text
+                update_sql = "UPDATE flu_model_config SET"
+                params = {}
+                updates = []
+                
+                # 更新 default_algorithm（如果字段存在）
+                if 'default_algorithm' in columns:
+                    updates.append("default_algorithm = :default_algorithm")
+                    params['default_algorithm'] = default_algorithm
+                
+                # 更新其他字段
+                if 'r0' in data:
+                    updates.append("r0 = :r0")
+                    params['r0'] = float(data['r0'])
+                if 'incubation_period' in data and 'incubation_period' in columns:
+                    updates.append("incubation_period = :incubation_period")
+                    params['incubation_period'] = float(data['incubation_period'])
+                if 'infectious_period' in data and 'infectious_period' in columns:
+                    updates.append("infectious_period = :infectious_period")
+                    params['infectious_period'] = float(data['infectious_period'])
+                if 'intervention_factor' in data and 'intervention_factor' in columns:
+                    updates.append("intervention_factor = :intervention_factor")
+                    params['intervention_factor'] = float(data['intervention_factor'])
+                if 'days' in data and 'days' in columns:
+                    updates.append("days = :days")
+                    params['days'] = int(data['days'])
+                
+                if updates:
+                    update_sql += " " + ", ".join(updates)
+                    update_sql += " WHERE is_default = 1 AND status = 1"
+                    db.session.execute(text(update_sql), params)
+                    db.session.commit()
+                
+                config = ModelConfigService.get_default_config()
+                
+        except Exception as e:
+            db.session.rollback()
+            raise e
         
         # 返回结果
         if hasattr(config, 'to_dict'):

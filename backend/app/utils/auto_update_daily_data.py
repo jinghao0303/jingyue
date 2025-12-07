@@ -1,13 +1,13 @@
 # file: app/utils/auto_update_daily_data.py
 """
 自动更新每日流感数据脚本
-在服务器启动时运行，检查今天的数据是否存在
-如果不存在，根据历史数据趋势自动生成模拟数据
+在服务器启动时运行，确保最近一年的数据连续可用
+缺失的数据会自动补齐，超过一年的历史会自动清理
 """
 from app import db, create_app
 from app.models import FluDailyCase, City
-from app.utils.db_service import CityService, FluDataService
 from datetime import date, timedelta
+from types import SimpleNamespace
 import random
 
 
@@ -121,13 +121,30 @@ def generate_today_data(city, latest_case):
     }
 
 
+RETENTION_DAYS = 365
+
+
+def clone_case(case):
+    """简化历史数据对象，用于在删除旧数据后继续生成新数据"""
+    if not case:
+        return None
+    return SimpleNamespace(
+        date=case.date,
+        confirmed=case.confirmed,
+        active=case.active,
+        recovered=case.recovered,
+        deaths=case.deaths
+    )
+
+
 def update_today_data_for_all_cities():
     """
-    为所有有数据的城市更新今天的数据
+    为所有有数据的城市补齐最近一年的每日数据，并自动清理过期记录
     """
     today = date.today()
-    skipped_count = 0
+    start_date = today - timedelta(days=RETENTION_DAYS)
     created_count = 0
+    cleaned_count = 0
     
     # 获取所有有历史数据的城市
     cities_with_data = db.session.query(City).join(FluDailyCase).distinct().all()
@@ -136,53 +153,71 @@ def update_today_data_for_all_cities():
         print("⚠️ 没有找到有历史数据的城市，跳过自动更新")
         return
     
-    print(f"📊 开始检查 {len(cities_with_data)} 个城市今天的数据...")
+    print(f"📊 正在确保 {len(cities_with_data)} 个城市最近 {RETENTION_DAYS} 天的数据完整...")
     
     for city in cities_with_data:
         try:
-            # 检查今天的数据是否已存在
-            today_case = FluDailyCase.query.filter_by(
-                city_id=city.id,
-                date=today
-            ).first()
+            # 记录保留区间之前最后一条数据，用作生成起点
+            baseline_case = FluDailyCase.query.filter(
+                FluDailyCase.city_id == city.id,
+                FluDailyCase.date < start_date
+            ).order_by(FluDailyCase.date.desc()).first()
+            baseline_snapshot = clone_case(baseline_case)
             
-            if today_case:
-                # 数据已存在，跳过
-                skipped_count += 1
-                continue
+            # 清理超过保留期的数据
+            cleaned = FluDailyCase.query.filter(
+                FluDailyCase.city_id == city.id,
+                FluDailyCase.date < start_date
+            ).delete(synchronize_session=False)
+            cleaned_count += cleaned
             
-            # 获取最新的历史数据
-            latest_case = FluDataService.get_latest_cases(city_id=city.id)
+            # 获取保留区间内已有的数据
+            existing_cases = FluDailyCase.query.filter(
+                FluDailyCase.city_id == city.id,
+                FluDailyCase.date >= start_date,
+                FluDailyCase.date <= today
+            ).order_by(FluDailyCase.date.asc()).all()
+            cases_by_date = {case.date: case for case in existing_cases}
             
-            if not latest_case:
-                print(f"  ⚠️ 城市 '{city.city_name}' 没有历史数据，跳过")
-                continue
+            latest_case = baseline_snapshot
+            city_created = 0
             
-            # 生成今天的数据
-            today_data = generate_today_data(city, latest_case)
+            current_date = start_date
+            while current_date <= today:
+                existing_case = cases_by_date.get(current_date)
+                if existing_case:
+                    latest_case = existing_case
+                else:
+                    today_data = generate_today_data(city, latest_case)
+                    new_case = FluDailyCase(
+                        date=current_date,
+                        city_id=city.id,
+                        confirmed=today_data['confirmed'],
+                        active=today_data['active'],
+                        recovered=today_data['recovered'],
+                        deaths=today_data['deaths'],
+                        new_cases=today_data['new_cases'],
+                        new_recovered=today_data['new_recovered'],
+                        new_deaths=today_data['new_deaths'],
+                        hospitalized=today_data['hospitalized'],
+                        severe=today_data['severe'],
+                        data_source='auto_generated',
+                        remark='系统自动生成（基于历史数据趋势）'
+                    )
+                    db.session.add(new_case)
+                    db.session.flush()
+                    latest_case = new_case
+                    created_count += 1
+                    city_created += 1
+                current_date += timedelta(days=1)
             
-            # 创建新的数据记录
-            new_case = FluDailyCase(
-                date=today,
-                city_id=city.id,
-                confirmed=today_data['confirmed'],
-                active=today_data['active'],
-                recovered=today_data['recovered'],
-                deaths=today_data['deaths'],
-                new_cases=today_data['new_cases'],
-                new_recovered=today_data['new_recovered'],
-                new_deaths=today_data['new_deaths'],
-                hospitalized=today_data['hospitalized'],
-                severe=today_data['severe'],
-                data_source='auto_generated',
-                remark='系统自动生成（基于历史数据趋势）'
-            )
+            if city_created > 0:
+                print(f"  ✅ 城市 '{city.city_name}': 补充 {city_created} 天数据")
+            else:
+                print(f"  ➖ 城市 '{city.city_name}': 数据已覆盖最近 {RETENTION_DAYS} 天")
             
-            db.session.add(new_case)
-            created_count += 1
-            
-            print(f"  ✅ 城市 '{city.city_name}': 已生成今天的数据")
-            print(f"     活跃病例: {latest_case.active} -> {today_data['active']} (+{today_data['new_cases']})")
+            if cleaned > 0:
+                print(f"     🧹 已清理 {cleaned} 条早于 {start_date} 的数据")
             
         except Exception as e:
             print(f"  ❌ 城市 '{city.city_name}' 更新失败: {e}")
@@ -192,7 +227,7 @@ def update_today_data_for_all_cities():
     # 提交所有更改
     try:
         db.session.commit()
-        print(f"\n✅ 自动更新完成: 创建 {created_count} 条新数据, 跳过 {skipped_count} 条已存在数据")
+        print(f"\n✅ 自动更新完成: 补齐 {created_count} 条数据, 清理 {cleaned_count} 条过期记录")
     except Exception as e:
         print(f"\n❌ 提交数据失败: {e}")
         db.session.rollback()

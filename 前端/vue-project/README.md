@@ -35,6 +35,15 @@ npm install
 npm run dev
 ```
 
+### Configure API base URL
+
+By default the frontend calls the backend using the current page origin (or `http://127.0.0.1:5010` during local development).  
+If your Flask API is exposed through a different host or port, create a `.env` file and set:
+
+```bash
+VITE_API_BASE_URL=http://your-api-host:port
+```
+
 ### Type-Check, Compile and Minify for Production
 
 ```sh

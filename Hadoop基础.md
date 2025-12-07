@@ -1,109 +1,229 @@
-# Hadoop基础
+# Hadoop 大数据生态系统全考点总复习
+
+## 第一部分：Hadoop 基础概论
+
+### 1. Hadoop 简介
+
+- 
+- **定义**：Hadoop 是一个由 **Apache 基金会** 开发的开源软件，是一个分布式系统基础架构。
+- **核心设计**：**HDFS** (存储) 和 **MapReduce** (计算)。
+- **开发语言**：**Java**。
+- **许可证**：**Apache License 2.0**。
+- **适用性**：
+  - 
+  - 理想用于处理大规模数据，支持数据压缩/解压。
+  - **不适合**处理小规模数据（小文件问题）。
+  - 主要解决海量数据的**存储**和**分析计算**问题。
+
+### 2. 运行模式 (必考)
+
+Hadoop 有三种运行模式，主要区别在于守护进程的运行位置和文件存储方式：
 
-## Haoop
+| 模式                      | 守护进程位置        | 文件存储     | 是否启动 HDFS | 特点                                   |
+| ------------------------- | ------------------- | ------------ | ------------- | -------------------------------------- |
+| **单机模式 (Standalone)** | 同一 JVM            | 本地文件系统 | **否**        | 默认模式，调试用，不与守护进程交互。   |
+| **伪分布式 (Pseudo)**     | 一台机器 (独立进程) | 一台机器     | **是**        | 模拟分布式，有 HDFS I/O，可检查内存。  |
+| **完全分布式 (Fully)**    | 多台机器            | 不同机器     | **是**        | **生产环境**，主节点和从节点分开部署。 |
 
-格式化命令是：hadoop namenode -format，格式化操作会清空NameNode的元数据
+### 3. 配置文件 (必考)
 
-核心配置文件是：hdfs-site.xml和yarn-site.xml，分别用于配置HDFS和YARN
+- 
+- **位置**：$HADOOP_HOME/etc/hadoop (旧版为 conf)。
+- **核心文件**：
+  - 
+  - hadoop-env.sh：配置环境，必须包含 **JAVA_HOME**。
+  - core-site.xml：核心全局配置（如 NameNode 地址）。
+  - hdfs-site.xml：**HDFS** 参数（如副本数 dfs.replication）。
+  - yarn-site.xml：**YARN** 参数（如 ResourceManager 地址）。
+  - mapred-site.xml：**MapReduce** 参数。
+- **注意**：在 0.20 版本后，hadoop-site.xml 被分离成上述几个 xml 文件。
 
-启动脚本位于：$HADOOP_HOME/sbin目录下，其中start-dfs.sh命令用于启动HDFS，start-yarn.sh命令用于启动YARN
+## 第二部分：HDFS (分布式文件系统)
+
+### 1. 体系结构 (Master/Slave)
+
+- **NameNode (Master)**：
+  - 管理文件系统的**命名空间** (Namespace)。
+  - 维护文件系统树及元数据 (Metadata)。
+  - 处理客户端的读写**访问**。
+  - *注意*：存在单点故障风险（通过 HA 解决）。
+- **DataNode (Slave)**：
+  - 负责**存储**实际的数据块 (Block)。
+  - 执行数据块的读写操作。
+- **SecondaryNameNode**：
+  - **定位**：NameNode 的**冷备份** (Cold Backup)，不是热备。
+  - **作用**：定期合并 fsimage 和 edits 日志，减少 NameNode 启动时间。
+  - **恢复**：当 NameNode 宕机，可恢复**部分**数据。
 
-伪分布模式下：NameNode默认监听端口号是8020，DataNode默认监听端口号是50010
+### 2. 存储机制
 
-核心组件包括：HDFS和MapReduce，分别负责分布式存储和分布式计算
+- **数据块 (Block)**：HDFS 存储的基本单位，默认大小 **128MB**。
+- **副本策略 (Replication)**：
+  - 配置项：dfs.replication。
+  - **第 1 副本**：**客户端所在节点** (若在集群外则随机)。
+  - **第 2 副本**：**不同机架** 的随机节点。
+  - **第 3 副本**：**第 2 副本所在机架** 的另一个节点。
+- **特性**：**HDFS HA** (高可用) 和 **Federation** (联邦) 是其特色。
+- **瓶颈**：集群的主要瓶颈通常是 **磁盘 I/O**。
 
-HDFS数据块副本数量的配置文件是：hdfs-site.xml，其对应的配置项名称为：dfs.replication
+### 3. 关键操作与端口
 
-HDFS采用了主从(Master/Slave)结构模型，一个HDFS集群是由一个NameNode和若干个DataNode组成的
+- **格式化**：hadoop namenode -format。
+  - *后果*：清空 NameNode 的**元数据**。只能执行一次。
+- **默认端口 (伪分布式)**：
+  - NameNode 通信：**8020**。
+  - DataNode 数据传输：**50010**。
 
-NameNode作为主服务器，管理文件系统的命名空间和客户端文件的访问操作
+### 4. 读取流程
 
-DataNode主要负责管理存储的数据
+1. Client 向 NameNode 请求文件元数据。
+2. NameNode 返回文件块所在的 DataNode 列表。
+3. Client 直接从最近的 DataNode 读取数据 (不经过 NameNode 传数据)。
 
-默认复本布局策略是在运行客户端节点上放第一个复本
+------
 
-第二个复本放在与第一个不同且随机另外选择的机架中的节点上
 
-第三个复本与第二个复本放在同一个机架上，且随机选择另一个节点
 
-完全分布模式通常被用于生产环境，主节点和从节点会分开
+## 第三部分：YARN & MapReduce
 
-secondaryNameNode更像是NameNode的一个冷备份，当NameNode宕机后，可以从secondaryNameNode上面恢复部分数据
+### 1. YARN (资源管理)
 
-YARN是Hadoop的资源管理系统，负责集群资源的分配和任务调度
-
-
-
-Hadoop的核心组件包括HDFS和MapReduce。HDFS(Hadoop Distributed File System)负责分布式存储，提供高可靠性、高吞吐的数据存储服务;MapReduce负责分布式计算，将大规模数据处理任务分解为多个小任务并行处理，提高计算效率
-
-
-
-安装配置Hadoop：使用root账号登录，修改ip、host主机名，配置SSH免密码登录，关闭防火墙，安装JDK，解压hadoop安装包，配置hadoop的核心文件hadoop-env.sh、core-site.xml、mapred-site.xml、hdfs-site.xml，配置hadoop环境变量，格式化hadoop namenode -format，启动节点start-all.sh
-
-
-
-namenode：管理集群，存储数据的元信息，并管理记录datanode中的文件信息，secondarynamenode：是namenode的一个快照，会根据configuration中设置的值来决定多少时间周期性的去复制namenode中的metadata及其它数据，Datanode存储数据，ResourceManager负责集群中所有资源的统一管理和分配，接收来自各个节点(NodeManager)的资源汇报信息，并把这些信息按照一定策略分配给各个应用程序，NodeManager是YARN中每个节点上的代理，管理Hadoop集群中单个计算节点
-
-
-
-## Linux系统
-
-ls命令：可以查看当前目录下的文件列表
-
-cd命令：可以切换工作目录
-
-vi命令：可以编辑文件内容，:wq命令可以保存退出编辑器
-
-cat命令：可以查看文件内容
-
-scp命令：可以将本地文件复制到远程主机的指定路径下
-
-ssh-keygen命令：用于生成SSH公钥以实现无密码登录
-
-su命令：可以切换用户身份
-
-为保证windows用户和Linux主机间用户能够正常地进行映射，用户必须保证在这两个系统上拥有相同的账号
-
-
-
-
-
-
-
-
-
-## JAVA（JDK）
-
-jps命令：查看当前系统运行的Java进程
-
-java -version命令：查看Java版本信息
-
-
-
-## Hive
-
-是一个基于Hadoop的一个数据仓库工具，可以将结构化的数据文件映射为一张数据库表
-
-提供简单的SQL查询功能
-
-从Hive shell 中运行shell命令可以使用!操作符
-
-Hive在加载数据过程中不会对数据进行任何的修改，只是将数据转移到HDFS中Hive设定的目录下，外部表实质是将已经存在的HDFS上的文件路径跟表关联起来，删除普通表时，元数据和数据同时被删除，删除外部表时，只删除元数据而不删除数据，创建外部表时需指定external关键字
-
-
-
-## Sqoop
-
-Sqoop基于MapReduce分布式处理，支持对HBase写入数据
-
-
-
-## ZooKeeper
-
-ZooKeeper具有高性能，同时保证了顺序处理，作用是分布式协调
-
-
-
-## HBase
-
-HBase是分布式列式存储系统，依靠HDFS存储底层数据，Region的物理存储单元是ColumnFamily，客户端首次查询HBase数据库时，首先需要从-ROOT-表开始查找，记录按列族集中存放
+- **全称**：Yet Another Resource Negotiator。
+- **作用**：Hadoop 的**资源管理系统**。
+- **核心功能**：
+  - 集群资源的**统一管理**和**分配**。
+  - 任务的**调度**和**监控**。
+- **设计理念**：将资源管理和任务调度**解耦 (分离)**。
+- **组件**：
+  - **ResourceManager**：全局资源管理。
+  - **NodeManager**：单节点资源管理。
+
+### 2. MapReduce (分布式计算)
+
+- **定位**：分布式计算框架，负责大规模数据的**批处理**。
+- **API**：
+  - Configuration 类默认实例化基于 HDFS 配置。
+  - FileStatus 存储文件/目录元数据。
+  - FSDataInputStream 继承自 java.io.DataInputStream。
+
+## 第四部分：ZooKeeper (分布式协调)
+
+### 1. 核心特性
+
+- **作用**：分布式协调、集群管理、配置维护、分布式同步。
+- **性能**：**高性能**，保证**顺序处理** (Sequential Consistency)。
+- **场景**：处理 **以读为主** (Read-heavy) 的任务非常快。
+- **可靠性**：提供可靠性保证。
+
+### 2. 工作机制
+
+- **节点数**：必须为 **奇数** 个 (为了选举机制)。
+- **原子性**：消息更新只能**成功或失败**，没有中间状态。
+- **写入条件**：一条消息被 **超过半数** (Quorum) 的 Server 接收，即可成功写入磁盘。
+- **顺序性**：客户端发送的更新按发送顺序应用。
+
+## 第五部分：Hive (数据仓库)
+
+### 1. 基本概念
+
+- **定义**：基于 Hadoop 的**数据仓库**工具。
+- **功能**：将**结构化**数据映射为**数据库表**，提供简单的 **SQL** 查询功能。
+- **机制**：
+  - 加载数据时**不修改数据**，只移动到 HDFS 目录。
+  - **延迟**：适合离线分析，**延迟较高**（不能实现低延迟快速查询）。
+- **操作符**：Hive Shell 中运行 Linux 命令使用 **!** (如 !ls)。
+- **变量赋值**：命令 set key=value (注：题目中依据正确答案 set = 是赋值，set 是查看)。
+
+### 2. 表的管理 (易混淆点)
+
+- **普通表 (Managed/Internal Table)**：
+  - 删除时：**元数据** 和 **数据** 同时被删除。
+- **外部表 (External Table)**：
+  - 创建时：需指定 **external** 关键字。
+  - 实质：将 HDFS 上的**文件路径**跟表关联。
+  - 删除时：**只删除元数据**，**不删除数据**。
+- **注意**：建表后可以增加新列（使用 ALTER），并非不可修改。
+
+## 第六部分：HBase (分布式数据库)
+
+### 1. 架构与存储
+
+- **定义**：建立在 **HDFS** 之上的分布式、**列式** (Column-oriented) 存储系统。
+- **底层存储**：依靠 **HDFS**。
+- **物理单元**：Region 的物理存储单元是 **ColumnFamily** (列族)。
+- **数据存放**：记录按 **列族** 集中存放。
+
+### 2. 查询与特性
+
+- **查询入口**：首次查询需先查找 **-ROOT-** 表 (旧版架构题，顺序：-ROOT- -> .META. -> 用户表)。
+- **功能**：
+  - 支持**条件查询**。
+  - 支持随机读写。
+- **依赖**：HBase 依赖 ZooKeeper (协调) 和 HDFS (存储)。
+
+## 第七部分：Sqoop (数据传输)
+
+### 1. 功能
+
+- **作用**：在 **关系型数据库** (RDBMS) 和 **Hadoop** (HDFS/Hive/HBase) 之间传输数据。
+- **底层**：基于 **MapReduce** 分布式处理。
+
+### 2. 能力与命令
+
+- **支持**：
+  - 支持结构化数据采集。
+  - 支持**非结构化数据采集** (题目判定为正确，考点)。
+  - 支持导入整个数据库、指定表、指定列。
+  - 支持写入 **HBase**。
+- **命令**：
+  - 把一系列表导入 HDFS：import-tables (注意是复数 s)。
+  - 定义 Hive 数据格式：使用 CREATE TABLE 语句。
+
+## 第八部分：Linux 与 运维基础
+
+### 1. 常用命令 (必背)
+
+- **文件操作**：
+  - ls：查看目录文件列表。
+  - cd：切换工作目录。
+  - cat：查看文件内容。
+  - vi：编辑文件 (保存退出：:wq)。
+  - cp：复制 (本地)。
+  - mv：移动/重命名。
+  - rm：删除。
+  - mkdir：创建目录。
+- **权限与网络**：
+  - chmod：修改文件权限。
+  - scp：远程文件复制 (本地到远程)。
+  - ssh-keygen：生成 SSH 公钥 (免密登录)。
+  - su：切换用户身份。
+- **解压**：
+  - tar -zxvf：解压 .tar.gz 包。
+
+### 2. 系统监控
+
+- jps：查看当前运行的 **Java 进程**。
+- java -version：查看 Java 版本。
+- **集群启动成功标志 (Master 节点)**：
+  - Namenode
+  - JobTracker (或 ResourceManager)
+  - SecondaryNameNode
+
+### 3. 启动与关闭流程
+
+- **启动脚本目录**：$HADOOP_HOME/sbin。
+- **关键命令**：
+  - start-dfs.sh (启动 HDFS)
+  - start-yarn.sh (启动 YARN)
+  - start-all.sh (启动所有)
+- **标准步骤**：
+  1. 配置 SSH 免密。
+  2. 格式化 NameNode (**仅一次**)。
+  3. 启动 HDFS -> 启动 YARN -> 检查 jps。
+- **关闭步骤**：
+  - 先停 YARN (stop-yarn.sh) -> 再停 HDFS (stop-dfs.sh)。
+
+### 4. 环境配置
+
+- **环境变量**：需配置 JAVA_HOME, HADOOP_HOME, 将 bin/sbin 加入 PATH。
+- **Windows 注意**：Windows 和 Linux 用户账号**不需要**一致即可映射（题目判断题：错）。

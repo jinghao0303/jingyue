@@ -1,0 +1,120 @@
+后端代码依赖库列表
+============================================
+生成时间: 2025-11-23
+说明: 此文件列出了后端项目中使用的所有第三方Python库
+============================================
+
+【核心Web框架】
+1. Flask - Python Web框架，用于构建API服务
+   安装: pip install Flask
+
+2. flask-sqlalchemy - Flask的SQLAlchemy扩展，用于数据库ORM
+   安装: pip install flask-sqlalchemy
+
+3. flask-jwt-extended - Flask的JWT扩展，用于用户认证和授权
+   安装: pip install flask-jwt-extended
+
+4. flask-cors - Flask的CORS扩展，用于处理跨域请求
+   安装: pip install flask-cors
+
+【数据库相关】
+5. SQLAlchemy - Python SQL工具包和ORM框架
+   安装: pip install SQLAlchemy
+
+6. pymysql - MySQL数据库驱动程序
+   安装: pip install pymysql
+
+【数据处理和科学计算】
+7. numpy - 数值计算库，用于数学运算
+   安装: pip install numpy
+
+8. pandas - 数据分析库，用于数据处理
+   安装: pip install pandas
+
+【机器学习/深度学习】
+9. tensorflow - Google的深度学习框架（用于LSTM模型）
+   安装: pip install tensorflow
+   注意: 如果只使用SEIR模型，可以跳过安装
+
+10. scikit-learn - 机器学习库（用于数据预处理，如MinMaxScaler）
+    安装: pip install scikit-learn
+
+11. prophet - Facebook的时间序列预测库（用于Prophet模型）
+    安装: pip install prophet
+    或者: conda install -c conda-forge prophet
+    注意: Prophet安装可能需要编译，建议使用conda
+
+【其他工具库】
+12. Werkzeug - WSGI工具库（Flask的底层依赖）
+    安装: 通常随Flask自动安装
+
+============================================
+快速安装命令:
+============================================
+
+方式1: 使用requirements.txt文件
+    pip install -r requirements.txt
+
+方式2: 一次性安装所有核心库
+    pip install Flask flask-sqlalchemy flask-jwt-extended flask-cors SQLAlchemy pymysql numpy pandas
+
+方式3: 如果需要使用LSTM模型
+    pip install tensorflow scikit-learn
+
+方式4: 如果需要使用Prophet模型
+    pip install prophet
+    或: conda install -c conda-forge prophet
+
+============================================
+库的使用说明:
+============================================
+
+1. Flask相关库 - 所有API路由都需要
+   - Flask: Web框架核心
+   - flask-sqlalchemy: 数据库ORM操作
+   - flask-jwt-extended: 用户登录认证
+   - flask-cors: 允许前端跨域访问
+
+2. 数据库库 - 数据持久化需要
+   - SQLAlchemy: ORM框架
+   - pymysql: MySQL连接驱动
+
+3. 数据处理库 - 模型计算需要
+   - numpy: 数学运算和数组操作
+   - pandas: 数据处理和DataFrame操作
+
+4. 机器学习库 - 可选（根据使用的模型）
+   - tensorflow: LSTM深度学习模型需要
+   - scikit-learn: 数据预处理（如归一化）需要
+   - prophet: Prophet时间序列预测模型需要
+
+============================================
+标准库（不需要安装）:
+============================================
+以下库是Python标准库，无需安装：
+- datetime, date, timedelta (日期时间)
+- os (操作系统接口)
+- sys (系统相关参数)
+- random (随机数生成)
+- math (数学函数)
+- json (JSON处理)
+- base64 (Base64编码)
+- typing (类型提示)
+- traceback (错误追踪)
+- inspect (对象检查)
+
+============================================
+版本建议:
+============================================
+Flask >= 2.0.0
+flask-sqlalchemy >= 3.0.0
+flask-jwt-extended >= 4.0.0
+flask-cors >= 3.0.0
+SQLAlchemy >= 2.0.0
+pymysql >= 1.0.0
+numpy >= 1.21.0
+pandas >= 1.3.0
+tensorflow >= 2.8.0
+scikit-learn >= 1.0.0
+prophet >= 1.0.0
+
